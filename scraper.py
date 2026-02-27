@@ -1,14 +1,11 @@
-import requests
-import base64
-import os
-import urllib3
-import socket
+import requests, base64, os, urllib3, socket, time
 from datetime import datetime
 from urllib.parse import urlparse
-from concurrent.futures import ThreadPoolExecutor # Для скорости
+from concurrent.futures import ThreadPoolExecutor
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Твои источники
 SOURCES = [
     "https://livpn.atwebpages.com/sub.php?token=3b4cbb400a537740",
     "https://subrostunnel.vercel.app/gen.txt",
@@ -17,51 +14,42 @@ SOURCES = [
     "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
 ]
 
-COUNTRIES = {
-    "GERMANY": "🇩🇪 DE", " DE ": "🇩🇪 DE", "USA": "🇺🇸 US", " US ": "🇺🇸 US",
-    "RUSSIA": "🇷🇺 RU", " RU ": "🇷🇺 RU", "TURKEY": "🇹🇷 TR", " TR ": "🇹🇷 TR",
-    "FRANCE": "🇫🇷 FR", " FR ": "🇫🇷 FR", "NETHERLANDS": "🇳🇱 NL", " NL ": "🇳🇱 NL",
-    "FINLAND": "🇫🇮 FI", " FI ": "🇫🇮 FI", "GREAT BRITAIN": "🇬🇧 GB", " UK ": "🇬🇧 GB",
-    "JAPAN": "🇯🇵 JP", "SINGAPORE": "🇸🇬 SG", "POLAND": "🇵🇱 PL", "CANADA": "🇨🇦 CA",
-    " UA ": "🇺🇦 UA", "UKRAINE": "🇺🇦 UA"
-}
-
-def check_port(config_line):
-    """Проверяет порт и возвращает линию, если сервер живой"""
+def get_country_by_ip(ip):
+    """Определяет страну через API (бесплатно)"""
     try:
-        # Извлекаем хост и порт
-        if config_line.startswith('ss://'):
-            content = config_line.split('://')[1].split('#')[0]
+        # Используем быстрое API ip-api.com
+        response = requests.get(f"http://ip-api.com/json/{ip}?fields=status,countryCode", timeout=2).json()
+        if response.get("status") == "success":
+            code = response.get("countryCode")
+            # Превращаем код в флаг
+            return f"{chr(ord(code[0]) + 127397)}{chr(ord(code[1]) + 127397)} {code}"
+    except:
+        pass
+    return "🏳️ UNKNOWN"
+
+def check_and_geo(line):
+    """Проверяет порт и сразу узнает страну по IP"""
+    try:
+        if line.startswith('ss://'):
+            content = line.split('://')[1].split('#')[0]
             server_data = base64.b64decode(content).decode('utf-8').split('@')[1] if '@' not in content else content.split('@')[1]
             host, port = server_data.split(':')
         else:
-            parsed = urlparse(config_line)
+            parsed = urlparse(line)
             host, port = parsed.hostname, parsed.port
 
-        if host and port:
-            with socket.create_connection((host, int(port)), timeout=1.5):
-                return config_line
+        # 1. Проверка порта
+        with socket.create_connection((host, int(port)), timeout=1.5):
+            # 2. Если живой, узнаем страну по IP (host)
+            geo = get_country_by_ip(host)
+            base = line.split("#")[0]
+            proto = line.split("://")[0].upper()
+            return f"{base}#{geo} {proto}"
     except:
         return None
 
-def process_config(line, idx):
-    """Форматирует название по странам"""
-    line_upper = line.upper()
-    proto = line.split("://")[0].upper()
-    found_country = "🏳️ UNKNOWN"
-    
-    for key, val in COUNTRIES.items():
-        if key in line_upper:
-            found_country = val
-            break
-            
-    base = line.split("#")[0]
-    return f"{base}#{found_country} {proto} {idx}"
-
 def scrape():
     raw_configs = set()
-    print("📡 Сбор ссылок...")
-    
     for url in SOURCES:
         try:
             r = requests.get(url, timeout=10, verify=False)
@@ -74,34 +62,20 @@ def scrape():
                         raw_configs.add(l.strip())
         except: continue
 
-    print(f"🔎 Проверка {len(raw_configs)} серверов в 50 потоков...")
-    alive_configs = []
+    print(f"🔍 Проверка и Геолокация {len(raw_configs)} серверов...")
     
-    # Запускаем параллельную проверку
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        results = list(executor.map(check_port, raw_configs))
-        alive_configs = [r for r in results if r]
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(check_and_geo, raw_configs))
+        alive = [r for r in results if r]
 
-    print(f"✨ Живых серверов: {len(alive_configs)}")
+    # Сортировка: сначала страны (по флагу), потом неизвестные
+    alive.sort(key=lambda x: ("UNKNOWN" in x, x.split("#")[1]))
 
-    # Форматируем названия
-    final_with = []
-    final_without = []
-    
-    for i, line in enumerate(alive_configs):
-        formatted = process_config(line, i + 1)
-        if "UNKNOWN" in formatted:
-            final_without.append(formatted)
-        else:
-            final_with.append(formatted)
-
-    final_with.sort()
-    final = final_with + sorted(final_without)
-    
     with open("sub.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(final))
+        f.write("\n".join(alive))
     with open("last_update.txt", "w", encoding="utf-8") as f:
         f.write(datetime.now().isoformat())
+    print(f"🏁 Успех! Найдено живых: {len(alive)}")
 
 if __name__ == "__main__":
     scrape()
