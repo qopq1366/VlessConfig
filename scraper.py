@@ -14,7 +14,7 @@ SOURCES = [
 
 def get_flag_emoji(country_code):
     if not country_code or len(country_code) != 2:
-        return "🌐"
+        return None
     return "".join(chr(127397 + ord(c)) for c in country_code.upper())
 
 async def get_country_info(session, ip):
@@ -28,70 +28,79 @@ async def get_country_info(session, ip):
 
 async def check_and_rename(session, url, counter):
     try:
-        # Улучшенный парсинг для разных протоколов
+        # Убираем старое название (все что после #)
         clean_url = url.split('#')[0]
+        proto = clean_url.split('://')[0].lower()
         
-        # Для VMess логика сложнее, но для проверки порта сойдет и так:
-        proto = url.split('://')[0]
+        # Извлекаем хост для проверки
         if proto == 'vmess':
-            # VMess ссылки обычно в base64, для простоты просто чекаем порт если он есть в строке
-            # или пропускаем глубокую проверку, если не хотим усложнять код
-            host = "google.com" # Заглушка, если не распарсили
+            # Для упрощения пропускаем проверку порта vmess, так как они в base64
+            # Но оставляем их в списке
+            host = "1.1.1.1" 
             port = 443
         else:
-            parsed = urlparse(url.replace(f'{proto}://', 'http://'))
+            parsed = urlparse(clean_url.replace(f'{proto}://', 'http://'))
             host = parsed.hostname
             port = parsed.port if parsed.port else 443
-        
-        # Проверка порта
-        conn = asyncio.open_connection(host, port)
-        reader, writer = await asyncio.wait_for(conn, timeout=2.0)
-        writer.close()
-        await writer.wait_closed()
+
+        # Быстрая проверка порта
+        try:
+            conn = asyncio.open_connection(host, port)
+            reader, writer = await asyncio.wait_for(conn, timeout=2.0)
+            writer.close()
+            await writer.wait_closed()
+        except: return None # Если порт закрыт - выкидываем
 
         # Страна и флаг
         code, name = await get_country_info(session, host)
-        if code and name:
-            flag = get_flag_emoji(code)
-            display_name = name
-        else:
-            flag, display_name = "🌐", "Unknown"
-
-        # Считаем тип протокола + страну
-        key = f"{proto.upper()} {display_name}"
-        counter[key] = counter.get(key, 0) + 1
+        flag = get_flag_emoji(code)
         
-        new_name = f"{flag} {proto.upper()} {display_name} {counter[key]}"
-        return f"{clean_url}#{quote(new_name)}"
+        if flag and name:
+            key = f"{flag} {proto.upper()} {name}"
+            counter[key] = counter.get(key, 0) + 1
+            new_name = f"{key} {counter[key]}"
+            sort_key = f"0_{name}_{proto}_{counter[key]}" # 0 в начале для приоритета
+        else:
+            counter["Unknown"] = counter.get("Unknown", 0) + 1
+            new_name = f"🌐 {proto.upper()} Unknown Node {counter['Unknown']}"
+            sort_key = f"1_Unknown_{proto}_{counter['Unknown']}" # 1 в начале, чтобы были в конце
+
+        return (f"{clean_url}#{quote(new_name)}", sort_key)
     except:
         return None
 
 async def main():
     raw_configs = set()
-    # Регулярка теперь ищет все популярные протоколы
-    pattern = r'(vless|vmess|trojan|ss)://[^\s]+'
+    # Регулярка для поиска всех типов протоколов
+    pattern = r'(?:vless|vmess|trojan|ss|ssr)://[^\s]+'
     
     for url in SOURCES:
         try:
             r = requests.get(url, timeout=10)
-            found = re.findall(pattern, r.text, re.IGNORECASE)
-            # findall с группами возвращает кортежи, склеиваем их обратно в ссылки
-            full_links = re.findall(r'(?:vless|vmess|trojan|ss)://[^\s]+', r.text, re.IGNORECASE)
-            raw_configs.update(full_links)
+            content = r.text
+            # Если контент в base64 (часто для vmess), это может мешать, 
+            # но мы ищем прямые ссылки в тексте
+            found = re.findall(pattern, content, re.IGNORECASE)
+            raw_configs.update(found)
         except: continue
 
-    print(f"Собрано {len(raw_configs)} разных протоколов. Проверяю...")
+    print(f"Собрано {len(raw_configs)} ссылок. Начинаю проверку...")
 
     country_counter = {}
     async with aiohttp.ClientSession() as session:
         tasks = [check_and_rename(session, conf, country_counter) for conf in raw_configs]
         results = await asyncio.gather(*tasks)
     
-    alive_configs = [res for res in results if res is not None]
+    # Фильтруем рабочие и сортируем: сначала страны (0_), потом Unknown (1_)
+    valid_results = [res for res in results if res is not None]
+    sorted_configs = sorted(valid_results, key=lambda x: x[1])
     
+    final_links = [item[0] for item in sorted_configs]
+
     with open("sub.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(alive_configs))
-    print(f"Готово! Теперь в списке {len(alive_configs)} конфигов.")
+        f.write("\n".join(final_links))
+    
+    print(f"Готово! В списке {len(final_links)} серверов.")
 
 if __name__ == "__main__":
     asyncio.run(main())
