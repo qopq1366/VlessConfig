@@ -1,14 +1,12 @@
 import requests
 import base64
-import re
 import os
 import urllib3
 from datetime import datetime
 
-# Отключаем ворнинги SSL
+# Отключаем ошибки SSL для "проблемных" источников
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ТВОИ ИСТОЧНИКИ + ПРОВЕРЕННЫЕ ДОПОЛНИТЕЛЬНЫЕ
 SOURCES = [
     "https://livpn.atwebpages.com/sub.php?token=3b4cbb400a537740",
     "https://subrostunnel.vercel.app/gen.txt",
@@ -16,6 +14,19 @@ SOURCES = [
     "https://raw.githubusercontent.com/CidVpn/cid-vpn-config/refs/heads/main/general.txt",
     "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
 ]
+
+def add_country_flags(config):
+    """Добавляет эмодзи флага в название конфига для красоты"""
+    flags = {
+        "DE": "🇩🇪", "US": "🇺🇸", "RU": "🇷🇺", "TR": "🇹🇷", 
+        "FR": "🇫🇷", "GB": "🇬🇧", "NL": "🇳🇱", "FI": "🇫🇮"
+    }
+    if "#" in config:
+        name_part = config.split("#")[-1].upper()
+        for code, emoji in flags.items():
+            if code in name_part:
+                return config + f" {emoji}"
+    return config
 
 def decode_content(text):
     try:
@@ -25,53 +36,47 @@ def decode_content(text):
 
 def scrape():
     raw_configs = []
-    print("🚀 Запуск масштабного сбора...")
+    print(f"🚀 Начало сбора: {datetime.now().strftime('%H:%M:%S')}")
     
     for url in SOURCES:
         try:
-            print(f"📡 Запрос: {url}")
+            # verify=False игнорирует ошибки сертификатов
             res = requests.get(url, timeout=15, verify=False)
             if res.status_code == 200:
                 content = decode_content(res.text)
-                
-                found_count = 0
+                found = 0
                 for line in content.splitlines():
                     line = line.strip()
-                    # Проверяем, что строка — это прокси-ссылка
                     if any(line.startswith(p) for p in ['vless://', 'vmess://', 'trojan://', 'ss://', 'ssr://']):
+                        # Добавляем флаг к названию
+                        line = add_country_flags(line)
                         raw_configs.append(line)
-                        found_count += 1
-                print(f"✅ Найдено: {found_count}")
+                        found += 1
+                print(f"✅ {url} -> Найдено: {found}")
         except Exception as e:
             print(f"❌ Ошибка на {url}: {e}")
 
-    # Убираем дубликаты
-    unique_configs = list(set(raw_configs))
-    
-    # СОРТИРОВКА И ГРУППИРОВКА
-    # Сначала VLESS, потом Trojan, потом SS
+    # Убираем дубликаты и пустые строки
+    unique_configs = list(set([c for c in raw_configs if c]))
+
+    # Сортировка: VLESS -> Trojan -> SS -> Остальное
     vless = [c for c in unique_configs if c.startswith('vless://')]
     trojan = [c for c in unique_configs if c.startswith('trojan://')]
     ss = [c for c in unique_configs if c.startswith('ss://')]
-    vmess = [c for c in unique_configs if c.startswith('vmess://')]
-    
-    # Собираем всё вместе
-    final_output = vless + trojan + ss + vmess
-    
-    if not final_output:
-        print("⚠ Конфиги не найдены. Отмена записи.")
-        return
+    others = [c for c in unique_configs if not any(c.startswith(p) for p in ['vless://', 'trojan://', 'ss://'])]
 
-    # Записываем основной файл подписки
-    with open("sub.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(final_output))
-    
-    # Записываем время обновления для таймера на сайте
-    with open("last_update.txt", "w", encoding="utf-8") as f:
-        f.write(datetime.now().isoformat())
+    final_list = vless + trojan + ss + others
+
+    if final_list:
+        with open("sub.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(final_list))
         
-    print(f"🏁 Готово! Итого: {len(final_output)} конфигов.")
-    print(f"📊 VLESS: {len(vless)} | Trojan: {len(trojan)} | SS: {len(ss)}")
+        with open("last_update.txt", "w", encoding="utf-8") as f:
+            f.write(datetime.now().isoformat())
+        
+        print(f"🏁 Успех! Собрано всего: {len(final_list)}")
+    else:
+        print("⚠ Новых конфигов не найдено.")
 
 if __name__ == "__main__":
     scrape()
