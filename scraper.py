@@ -5,6 +5,13 @@ import aiohttp
 from datetime import datetime
 from urllib.parse import urlparse, quote
 
+import requests
+import base64
+import re
+import os
+from datetime import datetime
+
+# ОГРОМНЫЙ СПИСОК ИСТОЧНИКОВ (собираем отовсюду)
 SOURCES = [
     "https://livpn.atwebpages.com/sub.php?token=3b4cbb400a537740",
     "https://subrostunnel.vercel.app/gen.txt",
@@ -12,6 +19,71 @@ SOURCES = [
     "https://raw.githubusercontent.com/CidVpn/cid-vpn-config/refs/heads/main/general.txt",
     "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
 ]
+
+def decode_content(text):
+    """Декодирует Base64, если это необходимо, или возвращает текст как есть"""
+    try:
+        # Пробуем декодировать (некоторые подписки целиком в base64)
+        return base64.b64decode(text).decode('utf-8')
+    except:
+        return text
+
+def scrape():
+    raw_configs = []
+    
+    print("🚀 Начинаю масштабный сбор...")
+    
+    for url in SOURCES:
+        try:
+            print(f"📡 Запрос к: {url}")
+            res = requests.get(url, timeout=15)
+            if res.status_code == 200:
+                content = decode_content(res.text)
+                # Ищем всё, что похоже на конфиг через регулярные выражения
+                found = re.findall(r'(vless://|vmess://|trojan://|ss://|ssr://)[\w\-\.\%\?\=\&\#\:\/]+', content)
+                
+                # Собираем найденные строки обратно в полные конфиги
+                lines = content.splitlines()
+                current_found = 0
+                for line in lines:
+                    line = line.strip()
+                    if any(line.startswith(p) for p in ['vless://', 'vmess://', 'trojan://', 'ss://', 'ssr://']):
+                        raw_configs.append(line)
+                        current_found += 1
+                print(f"✅ Найдено: {current_found}")
+        except Exception as e:
+            print(f"❌ Ошибка на {url}: {e}")
+
+    # Убираем дубликаты
+    unique_configs = list(set(raw_configs))
+    
+    # ГРУППИРОВКА ПО ПРОТОКОЛАМ (как ты просил)
+    vless = [c for c in unique_configs if c.startswith('vless://')]
+    trojan = [c for c in unique_configs if c.startswith('trojan://')]
+    ss = [c for c in unique_configs if c.startswith('ss://')]
+    ssr = [c for c in unique_configs if c.startswith('ssr://')]
+    vmess = [c for c in unique_configs if c.startswith('vmess://')]
+    
+    # Собираем финальный список в строгом порядке
+    final_output = vless + trojan + ss + ssr + vmess
+    
+    if not final_output:
+        print("☠️ Ничего не найдено! Проверь источники.")
+        return
+
+    # Записываем подписки
+    with open("sub.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(final_output))
+    
+    # Записываем время для таймера (в самом конце)
+    with open("last_update.txt", "w", encoding="utf-8") as f:
+        f.write(datetime.now().isoformat())
+        
+    print(f"🏁 Успех! Собрано всего: {len(final_output)}")
+    print(f"📊 Распределение: VLESS:{len(vless)}, Trojan:{len(trojan)}, SS:{len(ss)}, VMess:{len(vmess)}")
+
+if __name__ == "__main__":
+    scrape()
 
 def get_flag_emoji(country_code):
     if not country_code or len(country_code) != 2:
