@@ -39,7 +39,6 @@
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
         }
 
-        /* Анимация пульсирующей точки */
         .status-container {
             display: inline-flex;
             align-items: center;
@@ -139,11 +138,6 @@
         .btn:hover {
             transform: translateY(-2px);
             background: #2563eb;
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn:active {
-            transform: translateY(0);
         }
 
         .footer-note {
@@ -166,11 +160,11 @@
 
         <div class="stats">
             <div class="stat-box">
-                <span class="stat-val">{count}</span>
+                <span class="stat-val">$count</span>
                 <span class="stat-label">Серверов</span>
             </div>
             <div class="stat-box">
-                <span class="stat-val">~{timer} мин</span>
+                <span class="stat-val">~$timer мин</span>
                 <span class="stat-label">Обновление</span>
             </div>
         </div>
@@ -182,7 +176,6 @@
 
     <script>
         function copySubUrl() {
-            // Генерируем ссылку строго с /sub.txt
             const subUrl = window.location.origin + '/sub.txt';
             
             navigator.clipboard.writeText(subUrl).then(() => {
@@ -190,7 +183,7 @@
                 const originalText = btn.innerText;
                 
                 btn.innerText = 'URL скопирован!';
-                btn.style.background = var(--success);
+                btn.style.background = '#22c55e';
                 
                 setTimeout(() => {
                     btn.innerText = originalText;
