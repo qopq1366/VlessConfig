@@ -5,8 +5,8 @@ import urllib3
 import socket
 from datetime import datetime
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor # Для скорости
 
-# Отключаем предупреждения SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SOURCES = [
@@ -18,107 +18,90 @@ SOURCES = [
 ]
 
 COUNTRIES = {
-    "GERMANY": "🇩🇪 DE", " DE ": "🇩🇪 DE",
-    "USA": "🇺🇸 US", " US ": "🇺🇸 US", "UNITED STATES": "🇺🇸 US",
-    "RUSSIA": "🇷🇺 RU", " RU ": "🇷🇺 RU",
-    "TURKEY": "🇹🇷 TR", " TR ": "🇹🇷 TR",
-    "FRANCE": "🇫🇷 FR", " FR ": "🇫🇷 FR",
-    "NETHERLANDS": "🇳🇱 NL", " NL ": "🇳🇱 NL",
-    "FINLAND": "🇫🇮 FI", " FI ": "🇫🇮 FI",
-    "GREAT BRITAIN": "🇬🇧 GB", " UK ": "🇬🇧 GB",
-    "JAPAN": "🇯🇵 JP", " JP ": "🇯🇵 JP",
-    "SINGAPORE": "🇸🇬 SG", " SG ": "🇸🇬 SG",
-    "POLAND": "🇵🇱 PL", " PL ": "🇵🇱 PL",
-    "IRAN": "🇮🇷 IR", " KOREA ": "🇰🇷 KR",
-    "CANADA": "🇨🇦 CA", " UA ": "🇺🇦 UA", "UKRAINE": "🇺🇦 UA"
+    "GERMANY": "🇩🇪 DE", " DE ": "🇩🇪 DE", "USA": "🇺🇸 US", " US ": "🇺🇸 US",
+    "RUSSIA": "🇷🇺 RU", " RU ": "🇷🇺 RU", "TURKEY": "🇹🇷 TR", " TR ": "🇹🇷 TR",
+    "FRANCE": "🇫🇷 FR", " FR ": "🇫🇷 FR", "NETHERLANDS": "🇳🇱 NL", " NL ": "🇳🇱 NL",
+    "FINLAND": "🇫🇮 FI", " FI ": "🇫🇮 FI", "GREAT BRITAIN": "🇬🇧 GB", " UK ": "🇬🇧 GB",
+    "JAPAN": "🇯🇵 JP", "SINGAPORE": "🇸🇬 SG", "POLAND": "🇵🇱 PL", "CANADA": "🇨🇦 CA",
+    " UA ": "🇺🇦 UA", "UKRAINE": "🇺🇦 UA"
 }
 
-def check_port(address, port):
-    """Проверяет, открыт ли порт сервера (базовая проверка на 'живость')"""
+def check_port(config_line):
+    """Проверяет порт и возвращает линию, если сервер живой"""
     try:
-        with socket.create_connection((address, int(port)), timeout=2):
-            return True
-    except:
-        return False
-
-def get_server_info(line):
-    """Парсит адрес и порт из конфига"""
-    try:
-        if line.startswith('ss://'):
-            # Для Shadowsocks извлекаем адрес после @
-            content = line.split('://')[1].split('#')[0]
-            if '@' in content:
-                server_data = content.split('@')[1]
-            else:
-                # Если закодировано в base64
-                decoded = base64.b64decode(content).decode('utf-8')
-                server_data = decoded.split('@')[1]
+        # Извлекаем хост и порт
+        if config_line.startswith('ss://'):
+            content = config_line.split('://')[1].split('#')[0]
+            server_data = base64.b64decode(content).decode('utf-8').split('@')[1] if '@' not in content else content.split('@')[1]
             host, port = server_data.split(':')
-            return host, port
         else:
-            # Для VLESS/Trojan/VMess
-            parsed = urlparse(line)
-            return parsed.hostname, parsed.port
+            parsed = urlparse(config_line)
+            host, port = parsed.hostname, parsed.port
+
+        if host and port:
+            with socket.create_connection((host, int(port)), timeout=1.5):
+                return config_line
     except:
-        return None, None
+        return None
+
+def process_config(line, idx):
+    """Форматирует название по странам"""
+    line_upper = line.upper()
+    proto = line.split("://")[0].upper()
+    found_country = "🏳️ UNKNOWN"
+    
+    for key, val in COUNTRIES.items():
+        if key in line_upper:
+            found_country = val
+            break
+            
+    base = line.split("#")[0]
+    return f"{base}#{found_country} {proto} {idx}"
 
 def scrape():
-    with_country = []
-    without_country = []
-    unique_lines = set()
+    raw_configs = set()
+    print("📡 Сбор ссылок...")
     
-    print("--- Start Scraping + Health Check ---")
     for url in SOURCES:
         try:
-            r = requests.get(url, timeout=15, verify=False)
+            r = requests.get(url, timeout=10, verify=False)
             if r.status_code == 200:
                 text = r.text
                 try: text = base64.b64decode(text).decode('utf-8')
                 except: pass
-                
-                for line in text.splitlines():
-                    line = line.strip()
-                    if any(line.startswith(p) for p in ['vless://', 'vmess://', 'trojan://', 'ss://']):
-                        if line not in unique_lines:
-                            # ПРОВЕРКА ПОРТА (чтобы не было мертвых серверов)
-                            host, port = get_server_info(line)
-                            if host and port:
-                                if check_port(host, port):
-                                    unique_lines.add(line)
-                                    
-                                    # Определяем страну и чистим имя
-                                    line_upper = line.upper()
-                                    proto = line.split("://")[0].upper()
-                                    found_country = None
-                                    for key, val in COUNTRIES.items():
-                                        if key in line_upper:
-                                            found_country = val
-                                            break
-                                    
-                                    base_config = line.split("#")[0]
-                                    idx = len(unique_lines)
-                                    
-                                    if found_country:
-                                        new_line = f"{base_config}#{found_country} {proto} {idx}"
-                                        with_country.append(new_line)
-                                    else:
-                                        new_line = f"{base_config}#🏳️ UNKNOWN {proto} {idx}"
-                                        without_country.append(new_line)
+                for l in text.splitlines():
+                    if any(l.strip().startswith(p) for p in ['vless://', 'vmess://', 'trojan://', 'ss://']):
+                        raw_configs.add(l.strip())
         except: continue
 
-    # Сортировка и сборка
-    with_country.sort()
-    without_country.sort()
-    final = with_country + without_country
+    print(f"🔎 Проверка {len(raw_configs)} серверов в 50 потоков...")
+    alive_configs = []
     
-    if final:
-        with open("sub.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(final))
-        with open("last_update.txt", "w", encoding="utf-8") as f:
-            f.write(datetime.now().isoformat())
-        print(f"🏁 Done! Alive: {len(final)} (Verified)")
-    else:
-        print("⚠ No alive servers found!")
+    # Запускаем параллельную проверку
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        results = list(executor.map(check_port, raw_configs))
+        alive_configs = [r for r in results if r]
+
+    print(f"✨ Живых серверов: {len(alive_configs)}")
+
+    # Форматируем названия
+    final_with = []
+    final_without = []
+    
+    for i, line in enumerate(alive_configs):
+        formatted = process_config(line, i + 1)
+        if "UNKNOWN" in formatted:
+            final_without.append(formatted)
+        else:
+            final_with.append(formatted)
+
+    final_with.sort()
+    final = final_with + sorted(final_without)
+    
+    with open("sub.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(final))
+    with open("last_update.txt", "w", encoding="utf-8") as f:
+        f.write(datetime.now().isoformat())
 
 if __name__ == "__main__":
     scrape()
