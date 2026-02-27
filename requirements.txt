@@ -2,3 +2,4 @@ requests
 asyncio
 aiohttp
 urllib3
+PySocks
