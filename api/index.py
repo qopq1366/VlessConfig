@@ -22,7 +22,7 @@ class handler(BaseHTTPRequestHandler):
             if is_browser:
                 # 2. Определяем путь к index.html относительно текущего файла
                 current_dir = os.path.dirname(__file__)
-                html_path = os.path.join(current_dir, 'index.html')
+                html_path = os.path.join(current_dir, 'template.html')
                 
                 with open(html_path, 'r', encoding='utf-8') as f:
                     html_template = f.read()
