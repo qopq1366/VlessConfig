@@ -7,7 +7,9 @@ from urllib.parse import urlparse, quote
 SOURCES = [
     "https://livpn.atwebpages.com/sub.php?token=3b4cbb400a537740",
     "https://subrostunnel.vercel.app/gen.txt",
-    "https://gitverse.ru/api/repos/Vsevj/OBS/raw/branch/master/wwh"
+    "https://gitverse.ru/api/repos/Vsevj/OBS/raw/branch/master/wwh",
+    "https://raw.githubusercontent.com/CidVpn/cid-vpn-config/refs/heads/main/general.txt",
+    "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
 ]
 
 def get_flag_emoji(country_code):
