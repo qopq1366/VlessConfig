@@ -12,7 +12,9 @@ SOURCES = [
     "https://gitverse.ru/api/repos/Vsevj/OBS/raw/branch/master/wwh",
     "https://raw.githubusercontent.com/CidVpn/cid-vpn-config/refs/heads/main/general.txt",
     "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt",
-    "http://livpnsub.dpdns.org/sub.php?token=d712619499224ddb"
+    "http://livpnsub.dpdns.org/sub.php?token=d712619499224ddb",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/ee6d4bfcb84d006d669d5c38a3111b42917171a2/BLACK_VLESS_RUS.txt",
+    "https://raw.githubusercontent.com/EtoNeYaProject/etoneyaproject.github.io/refs/heads/main/other"
 ]
 
 # Тот самый расширенный список стран из первого варианта
