@@ -11,7 +11,8 @@ SOURCES = [
     "https://subrostunnel.vercel.app/gen.txt",
     "https://gitverse.ru/api/repos/Vsevj/OBS/raw/branch/master/wwh",
     "https://raw.githubusercontent.com/CidVpn/cid-vpn-config/refs/heads/main/general.txt",
-    "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt"
+    "https://raw.githubusercontent.com/LimeHi/LimeVPN/refs/heads/main/LimeVPN.txt",
+    "http://livpnsub.dpdns.org/sub.php?token=d712619499224ddb"
 ]
 
 # Тот самый расширенный список стран из первого варианта
