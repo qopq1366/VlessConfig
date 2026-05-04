@@ -1,4 +1,4 @@
 # VlessConfig
 ТГ: https://t.me/allvpntg
-ЧС/БС: http://allvpn.x10.mx/sub.php
+ЧС/БС: в ТГ
 TV: в тг
